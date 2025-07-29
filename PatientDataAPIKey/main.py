@@ -1,8 +1,41 @@
 from fastapi import FastAPI,Path,HTTPException,Query
+from fastapi.responses import JSONResponse 
 import json
+from pydantic import BaseModel,computed_field,Field
+from typing import Literal,Annotated
 
 app = FastAPI() # making object
 
+class Patient(BaseModel):
+    
+    id : Annotated[str,Field(max_length=30,title='Enter patients Id: ',examples=['P001'])]
+    name: Annotated[str,Field(max_length=30,title='Enter patients name: ',examples=['Raj shukla','pappu bhai'])]
+    city: Annotated[str,Field(max_length=30,title='Enter patients city: ',examples=['Ahmedabad'])]
+    height:Annotated[float,Field(gt=0,title='Enter patients height in meters: ',examples=['1.72','1.43'])]
+    weight:Annotated[float,Field(gt=0,title='Enter patients weight in kgs: ',examples=['1.72','1.43'])]
+    gender:Annotated[Literal['male','female'],Field(...,title='Enter gender of the patient: ')]
+    
+    @computed_field
+    def bmi(self) -> float:
+        return self.weight/(self.height**2)
+    
+    
+    @computed_field
+    def verdict(self) -> str:
+        if self.bmi < 18.5:
+            return 'Underweight'
+        elif self.bmi < 35:
+            return 'Normal'
+        else:
+            return 'Overweight'
+        
+
+
+
+def save_data(data):
+    with open('PatientData.json','w') as f:
+        json.dump(data,f)
+        
 def load_json():
     with open('PatientData.json','r') as f:
         data = json.load(f)
@@ -36,10 +69,10 @@ def sort_patients(sort_by: str = Query(..., description = 'Sort the values by he
     data = load_json()
     
     if sort_by not in valied_fields:
-        return HTTPException(status_code=400,detail='Bad request')
+        raise HTTPException(status_code=400,detail='Bad request')
 
     if order not in ['asc','desc']:
-        return HTTPException(status_code=400,detail='Bad request')
+        raise HTTPException(status_code=400,detail='Bad request')
 
     order_by = True if order == 'desc' else False
     
@@ -47,3 +80,21 @@ def sort_patients(sort_by: str = Query(..., description = 'Sort the values by he
     
     return sorted_data
 
+@app.post('/create')
+def Add_patient(patient: Patient):
+    
+    # load data
+    data = load_json()
+    
+    # check if the patient already exiest
+    if patient.id in data:
+        raise HTTPException(status_code = 400,detail = 'Patient already exiest')
+    
+    # Add Patient
+    data[patient.id] = patient.model_dump(exclude=['id'])
+    
+    #save model
+    save_data(data)
+    
+    return JSONResponse(status_code = 201,content = {'New Patient created successfully'})
+    
